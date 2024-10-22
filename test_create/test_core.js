@@ -146,13 +146,31 @@ AngularInterface.controller("view", ['$scope', '$element', '$window', function (
     $s.exportXML = function () {
         var s = new XMLSerializer();
         var doc = specification.encode();
-        var xmlstr = s.serializeToString(doc);
-        var bb = new Blob(["<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>" + s.serializeToString(doc)], {
-            type: 'application/xml'
+        
+        // Add XML declaration with UTF-8 encoding
+        var xmlDeclaration = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        
+        var xmlstr = xmlDeclaration + s.serializeToString(doc);
+        
+        // Encode the XML string to UTF-8
+        var encoder = new TextEncoder();
+        var xmlUint8Array = encoder.encode(xmlstr);
+        
+        // Add UTF-8 BOM
+        var utf8Bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+        
+        // Combine BOM and XML data
+        var combinedArray = new Uint8Array(utf8Bom.length + xmlUint8Array.length);
+        combinedArray.set(utf8Bom, 0);
+        combinedArray.set(xmlUint8Array, utf8Bom.length);
+        
+        var bb = new Blob([combinedArray], {
+            type: 'application/xml;charset=utf-8'
         });
+        
         var dnlk = window.URL.createObjectURL(bb);
         var a = document.createElement("a");
-        document.body.appendChild(a)
+        document.body.appendChild(a);
         a.href = dnlk;
         a.download = "test.xml";
         a.click();
@@ -163,30 +181,104 @@ AngularInterface.controller("view", ['$scope', '$element', '$window', function (
     $s.showValidationMessages = false;
     $s.validate = function () {
         var s = new XMLSerializer();
-        var Module = {
-            xml: "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>" + s.serializeToString(specification.encode()),
+        var xmlDoc = specification.encode();
+        
+        // Add XML declaration with UTF-8 encoding
+        var xmlDeclaration = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        
+        // Serialize the XML document to a string
+        var xmlString = xmlDeclaration + s.serializeToString(xmlDoc);
+        
+        // Ensure proper UTF-8 encoding
+        var encoder = new TextEncoder();
+        var xmlUint8Array = encoder.encode(xmlString);
+        
+        // Convert back to a UTF-8 string for xmllint
+        var decoder = new TextDecoder('utf-8');
+        var utf8String = decoder.decode(xmlUint8Array);
+
+        console.log("XML being validated:", utf8String);
+        
+        var options = {
+            xml: utf8String,
             schema: specification.getSchemaString(),
-            arguments: ["--noout", "--schema", 'test-schema.xsd', 'document.xml']
+            format: 'xsd',  // Assuming you're using XSD schema
+            TOTAL_MEMORY: 10 * 1024 * 1024  // Adjust as needed
         };
-        var xmllint = validateXML(Module);
-        console.log(xmllint);
-        if (xmllint != 'document.xml validates\n') {
+        
+        var result = xmllint.validateXML(options);
+        console.log("Validation result:", result);
+        
+        $s.showValidationMessages = true;
+
+        if (result.errors) {
             $s.validated = false;
-            var list = $e[0].querySelector("#validation-error-list");
-            while (list.firstChild) {
-                list.removeChild(list.firstChild);
+            
+            // Remove success message if it exists
+            var successAlert = document.querySelector(".alert-success");
+            if (successAlert) {
+                successAlert.parentNode.removeChild(successAlert);
             }
-            var errors = xmllint.split('\n');
-            errors = errors.slice(0, errors.length - 2);
-            errors.forEach(function (str) {
+
+            // Create or update the error panel
+            var validationContainer = document.querySelector("[ng-switch]");
+            if (!validationContainer) {
+                validationContainer = document.createElement("div");
+                validationContainer.setAttribute("ng-switch", "on=\"validated\"");
+                validationContainer.setAttribute("ng-show", "showValidationMessages");
+                document.body.appendChild(validationContainer);
+            }
+
+            validationContainer.innerHTML = `
+                <div class="panel panel-danger" ng-switch-when="false">
+                    <div class="panel-heading">
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close" ng-click="hideValidationMessages"><span aria-hidden="true">&times;</span></button>
+                        <h3 class="panel-title">Invalid Specification!</h3>
+                    </div>
+                    <div class="panel-body">
+                        <p>Your specification is invalid. Please fix the following issues!</p>
+                        <ul id="validation-error-list"></ul>
+                    </div>
+                </div>
+            `;
+
+            // Now we're sure the list exists, so we can safely manipulate it
+            var list = document.getElementById("validation-error-list");
+            
+            // Add new error messages
+            result.errors.forEach(function (str) {
                 var li = document.createElement("li");
                 li.textContent = str;
                 list.appendChild(li);
             });
         } else {
             $s.validated = true;
+            
+            // Remove error panel if it exists
+            var errorPanel = document.querySelector(".panel-danger");
+            if (errorPanel) {
+                errorPanel.parentNode.removeChild(errorPanel);
+            }
+
+            // Show success message
+            var validationContainer = document.querySelector("[ng-switch]");
+            if (!validationContainer) {
+                validationContainer = document.createElement("div");
+                validationContainer.setAttribute("ng-switch", "on=\"validated\"");
+                validationContainer.setAttribute("ng-show", "showValidationMessages");
+                document.body.appendChild(validationContainer);
+            }
+
+            validationContainer.innerHTML = `
+                <div class="alert alert-success" role="alert" ng-switch-when="true">
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close" ng-click="hideValidationMessages"><span aria-hidden="true">×</span></button>
+                    <strong>Validates! </strong><span>Well done, you can export this specification!</span>
+                </div>
+            `;
         }
-        $s.showValidationMessages = true;
+
+        // Ensure Angular updates the view
+        $s.$apply();
     }
     $s.hideValidationMessages = function () {
         $s.showValidationMessages = false;
@@ -615,3 +707,8 @@ AngularInterface.controller("page", ['$scope', '$element', '$window', function (
         return attr;
     }
 }]);
+
+
+
+
+

@@ -15,7 +15,7 @@ window.onload = function () {
         body.appendChild(table);
     } else {
         var head = document.getElementsByTagName("head")[0];
-        var src_list = ['js/specification.js', 'js/core.js', 'js/loudness.js', 'js/xmllint.js', 'js/WAVE.js'];
+        var src_list = ['js/specification.js', 'js/loudness.js', 'js/xmllint.js', 'js/WAVE.js', 'js/core.js'];
         for (var i = 0; i < src_list.length; i++) {
             var src = src_list[i];
             var script = document.createElement("script");

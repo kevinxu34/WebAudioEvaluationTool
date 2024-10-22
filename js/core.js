@@ -131,9 +131,12 @@ var check_dependancies = function () {
         return false;
     }
     if (typeof (WAVE) != "function") {
+        console.log(typeof (WAVE));
         return false;
     }
-    if (typeof (validateXML) != "function") {
+    if (typeof xmllint !== "object" || typeof xmllint.validateXML !== "function") {
+        console.error("XML validation function is not available");
+        console.log(typeof (xmllint));
         return false;
     }
     return true;
@@ -263,15 +266,25 @@ function loadProjectSpecCallback(response) {
         // document is a specification
 
         // Perform XML schema validation
-        var Module = {
-            xml: response,
+        if (typeof xmllint !== "object" || typeof xmllint.validateXML !== "function") {
+            console.error("XML validation function is not available");
+            return false;
+        }
+
+        // Then proceed with the validation code
+        var xmlString = new XMLSerializer().serializeToString(responseDocument);
+
+        var options = {
+            xml: xmlString,
             schema: specification.getSchemaString(),
-            arguments: ["--noout", "--schema", 'test-schema.xsd', 'document.xml']
+            format: 'xsd',  // Assuming you're using XSD schema
+            TOTAL_MEMORY: 10 * 1024 * 1024  // Adjust as needed
         };
-        projectXML = responseDocument;
-        var xmllint = validateXML(Module);
-        console.log(xmllint);
-        if (xmllint != 'document.xml validates\n') {
+
+        var result = xmllint.validateXML(options);
+        console.log("Validation result:", result);
+
+        if (result.errors) {
             document.getElementsByTagName('body')[0].innerHTML = null;
             msg = document.createElement("h3");
             msg.textContent = "FATAL ERROR";
@@ -279,15 +292,19 @@ function loadProjectSpecCallback(response) {
             span.textContent = "The XML validator returned the following errors when decoding your XML file";
             document.getElementsByTagName('body')[0].appendChild(msg);
             document.getElementsByTagName('body')[0].appendChild(span);
-            xmllint = xmllint.split('\n');
-            for (var i in xmllint) {
+
+            result.errors.forEach(function(error) {
                 document.getElementsByTagName('body')[0].appendChild(document.createElement('br'));
                 span = document.createElement("span");
-                span.textContent = xmllint[i];
+                span.textContent = error;
                 document.getElementsByTagName('body')[0].appendChild(span);
-            }
+            });
             return;
         }
+
+        // If validation passes, continue with the rest of the code
+        projectXML = responseDocument;
+
         // Build the specification
         specification.decode(projectXML);
         // Generate the session-key
